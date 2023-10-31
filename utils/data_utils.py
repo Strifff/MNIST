@@ -3,6 +3,242 @@ import cv2
 import torch
 import matplotlib.pyplot as plt
 
+from torch.utils.data import Dataset
+import numpy as np
+import struct
+import os
+from torchvision import transforms
+import torch
+from torch.utils.data import Dataset
+
+
+class AugmentedDataset(Dataset):
+    def __init__(
+        self,
+        image_file="./data/augmented_train_data/train-images-aug-idx3-ubyte",
+        label_file="./data/augmented_train_data/train-labels-aug-idx1-ubyte",
+        transform=None,
+    ):
+        self.image_file = image_file
+        self.label_file = label_file
+        self.images = self.load_images()
+        self.labels = self.load_labels()
+        self.images_buffer = []
+        self.labels_buffer = []
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        image = self.images[idx]
+        label = self.labels[idx]
+        if isinstance(image, torch.Tensor):
+            if self.transform:
+                image = self.transform(image)
+                # image = image
+                print("tensor")
+        else:
+            # Handle non-tensor types (e.g., NumPy arrays) with previous approach
+            try:
+                if not image.flags.writeable:
+                    image = np.copy(image)
+                    print("not tensor")
+            except AttributeError:
+                print("Error copying image, returning original")
+            if self.transform:
+                print("transform----------------------------------------")
+                print(image)
+                image = self.transform(image)
+                print("after transform")
+                print(image)
+        return image, label
+
+    def load_images(self):
+        images = []
+        try:
+            with open(self.image_file, "rb") as file:
+                magic, num_images, rows, cols = struct.unpack(">IIII", file.read(16))
+                print("magic: ", magic)
+                print("num_images: ", num_images)
+                print("rows: ", rows)
+                print("cols: ", cols)
+
+                image_data = file.read()
+
+                for i in range(num_images):
+                    image = np.frombuffer(
+                        image_data[i * rows * cols : (i + 1) * rows * cols],
+                        dtype=np.uint8,
+                    )
+                    image = np.reshape(image, (rows, cols))
+                    images.append(image)
+                    print("image")
+                    print(image)
+        except (FileNotFoundError, ValueError, struct.error):
+            print("Error loading images")
+
+        return images
+
+    def load_labels(self):
+        labels = []
+
+        try:
+            with open(self.label_file, "rb") as file:
+                magic, num_labels = struct.unpack(">II", file.read(8))
+                label_data = file.read()
+
+                if len(label_data) > 0:
+                    labels = np.frombuffer(label_data, dtype=np.uint8)
+        except (FileNotFoundError, ValueError, struct.error):
+            print("Error loading labels")
+
+        return labels if isinstance(labels, list) else labels.tolist()
+
+    def add_image_label(self, image, label):
+        image = torch.squeeze(image, dim=0)
+        label = torch.squeeze(label, dim=0)
+
+        self.images.append(image)
+        self.labels.append(label)
+        self.save_to_files
+
+    def buffer_add_image_label(self, image, label):
+        image = image.detach().cpu()
+        label = label.detach().cpu()
+        image = torch.squeeze(image, dim=0)
+        label = torch.squeeze(label, dim=0)
+        self.images_buffer.append(image)
+        self.labels_buffer.append(label)
+
+    def fast_save(self):
+        self.save_to_files()
+        print("Dataset saved")
+        self.images_buffer = []  # Clear the temporary storage
+        self.labels_buffer = []
+
+    def save_to_files(self):
+        with open(self.image_file, "wb") as f_image:
+            f_image.write(struct.pack(">IIII", 2051, len(self.images_buffer), 28, 28))
+            for img in self.images_buffer:
+                img_array = img.detach().cpu().numpy()  # .reshape(28, 28)
+                f_image.write(img_array.tobytes())
+                print("save")
+                print(img_array)
+
+        with open(self.label_file, "wb") as f_label:
+            f_label.write(struct.pack(">II", 2049, len(self.labels_buffer)))
+            for lbl in self.labels_buffer:
+                f_label.write(struct.pack("B", lbl))
+
+    def clear_dataset(self):
+        # Delete the files if they exist
+        if os.path.exists(self.image_file):
+            os.remove(self.image_file)
+        if os.path.exists(self.label_file):
+            os.remove(self.label_file)
+
+        # Save empty data to the files after deletion
+        self.images = []  # Clear the images
+        self.labels = []  # Clear the labels
+        self.save_to_files()
+        print("Dataset cleared")
+
+
+class DS2(Dataset):
+    def __init__(
+        self,
+        image_file="./data/augmented_train_data/train-images-aug-idx3-ubyte",
+        label_file="./data/augmented_train_data/train-labels-aug-idx1-ubyte",
+        transform=None,
+    ):
+        self.image_file = image_file
+        self.label_file = label_file
+        self.images = self.load_images()
+        self.labels = self.load_labels()
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        image = self.images[idx]
+        label = self.labels[idx]
+        return image, label
+
+    def load_images(self):
+        images = []
+        try:
+            with open(self.image_file, "rb") as file:
+                magic, num_images, rows, cols = struct.unpack(">IIII", file.read(16))
+                image_data = file.read()
+
+                for i in range(num_images):
+                    image = np.frombuffer(
+                        image_data[i * rows * cols : (i + 1) * rows * cols],
+                        dtype=np.uint8,
+                    )
+
+                    image = np.reshape(image, (rows, cols))
+                    image = torch.from_numpy(np.copy(image)).float().unsqueeze(0) / 255
+                    images.append(image)
+        except (FileNotFoundError, ValueError, struct.error):
+            print("Error loading images")
+
+        return images
+
+    def load_labels(self):
+        labels = []
+
+        try:
+            with open(self.label_file, "rb") as file:
+                magic, num_labels = struct.unpack(">II", file.read(8))
+                label_data = file.read()
+
+                if len(label_data) > 0:
+                    labels = np.frombuffer(label_data, dtype=np.uint8)
+        except (FileNotFoundError, ValueError, struct.error):
+            print("Error loading labels")
+
+        return labels if isinstance(labels, list) else labels.tolist()
+
+    def add_image_label(self, image, label):
+        image = torch.squeeze(image, dim=0)
+        label = torch.squeeze(label, dim=0)
+
+        self.images.append(image)
+        self.labels.append(label)
+
+    def save_to_files(self):
+        with open(self.image_file, "wb") as f_image:
+            f_image.write(struct.pack(">IIII", 2051, len(self.images), 28, 28))
+            for img in self.images:
+                img = img.detach().cpu()
+                img_array = (img * 254).squeeze(0).numpy().astype(np.uint8)
+                # print(img_array)
+                # plt.imshow(img_array)
+                # plt.title("save")
+                # plt.show()
+                f_image.write(img_array.tobytes())
+
+        with open(self.label_file, "wb") as f_label:
+            f_label.write(struct.pack(">II", 2049, len(self.labels)))
+            for lbl in self.labels:
+                f_label.write(struct.pack("B", lbl))
+
+    def clear_dataset(self):
+        # Delete the files if they exist
+        if os.path.exists(self.image_file):
+            os.remove(self.image_file)
+        if os.path.exists(self.label_file):
+            os.remove(self.label_file)
+
+        # Save empty data to the files after deletion
+        self.images = []  # Clear the images
+        self.labels = []  # Clear the labels
+        self.save_to_files()
+        print("Dataset cleared")
+
 
 def image_to_tensor(image):
     image = torch.from_numpy(image)
@@ -75,8 +311,6 @@ def skew(image, factor):
     c3 = int(np.random.uniform(start, end))
     c4 = int(np.random.uniform(start, end))
 
-    print(start, end)
-
     # Skew image
     pts1 = np.float32([[0, 0], [cols_pad, 0], [0, rows_pad], [cols_pad, rows_pad]])
     pts2 = np.float32(
@@ -117,7 +351,7 @@ def rotate(image):
     rows_pad, cols_pad = image_pad_np.shape[1:3]
     size_pad = (rows_pad + cols_pad) / 2  # size of the image
 
-    angle = 45 * np.random.uniform(-1, 1)
+    angle = 25 * np.random.uniform(-1, 1)
     center = (cols_pad / 2, rows_pad / 2)
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
 
@@ -141,3 +375,67 @@ def blur(image):
     reshaped_output = image_blurred.reshape(1, cols, rows)
 
     return reshaped_output
+
+
+def sharpen(image):
+    """Sharpen image"""
+    image = image.copy()
+    image_np = image.astype(np.float32)
+    rows, cols = image_np.shape[1:3]
+
+    # Sharpen image
+    image_reshaped = image_np.reshape(rows, cols)
+    kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+    image_sharpened = cv2.filter2D(image_reshaped, -1, kernel)
+    reshaped_output = image_sharpened.reshape(1, cols, rows)
+
+    return reshaped_output
+
+
+def augment_image(image):
+    """Augment image"""
+    image = image.copy()
+    if image.shape != (1, 28, 28):
+        image = image.reshape(1, 28, 28)
+    image_np = image.astype(np.float32)
+    rows, cols = image_np.shape[1:3]
+
+    images = []
+    images += [image_np]
+
+    # Pad image
+    # image_pad = pad_image(image_np, 10)
+    # image_pad = scale_down_image(image_pad, 28, 28)
+    # images += [image_pad]
+
+    # Skew image
+    image_skewed = skew(image_np, 0.5)
+    images += [image_skewed]
+
+    # Rotate image
+    image_rotated = rotate(image_np)
+    images += [image_rotated]
+
+    # Blur image
+    image_blurred = blur(image_np)
+    images += [image_blurred]
+
+    # Cross augmentations
+    tensor_images = []
+    for image in images:
+        tensor_images += [image_to_tensor(image)]
+
+        paddded = pad_image(image, 10)
+        paddded = scale_down_image(paddded, 28, 28)
+        tensor_images += [image_to_tensor(paddded)]
+
+        # skewed = skew(image, 0.5)
+        # tensor_images += [image_to_tensor(skewed)]
+
+        rotated = rotate(image)
+        tensor_images += [image_to_tensor(rotated)]
+
+        blurred = blur(image)
+        tensor_images += [image_to_tensor(blurred)]
+
+    return tensor_images

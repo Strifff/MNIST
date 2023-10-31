@@ -2,14 +2,27 @@ import os
 import argparse
 import torch
 import torch.nn as nn
+import numpy as np
 import torch.optim as optim
 import matplotlib.pyplot as plt
+import tqdm
+import time
 
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 from test_installation import test_pytorch, show_random_img
 from neural_network.network import SimpleNN, evaluate_batch
-from utils.data_utils import skew, rotate, pad_image, image_to_tensor, blur, scale_down_image, shadow
+from utils.data_utils import (
+    skew,
+    rotate,
+    pad_image,
+    image_to_tensor,
+    blur,
+    scale_down_image,
+    augment_image,
+    AugmentedDataset,
+    DS2,
+)
 from utils.plot_utils import plot_grid
 
 
@@ -64,13 +77,44 @@ def train_simple_nn():
     # torch.save(model.state_dict(), "mnist_model.pth")
 
 
-def augment_data():
+def augment_data_tester():
+    print("TESTER")
     transform = transforms.Compose([transforms.ToTensor()])
     mnist_dataset = datasets.MNIST(
-        root="./mnist_data", train=True, transform=transform, download=True
+        root="./data/mnist_data", train=True, transform=transform, download=True
     )
     dataloader = DataLoader(mnist_dataset, batch_size=1, shuffle=True)
     original_image, original_label = next(iter(dataloader))
+    # print("image: ", original_image.shape, original_image.dtype)
+    # print("label: ", original_label.shape, original_label.dtype)
+
+    dataloader = DataLoader(mnist_dataset, batch_size=10, shuffle=True)
+    # print("dl std: ", next(iter(dataloader))[0].shape, next(iter(dataloader))[1].shape)
+
+    print("original: ", original_image.shape, original_label.shape)
+    print("original: ", original_label.shape, original_label.dtype)
+    augmented = augment_image(original_image.numpy()[0])
+
+    im_label = []
+
+    for im in augmented:
+        im_label += [(im, original_label)]
+
+    plot_grid(im_label)
+    return
+    # my_aug_dataset = AugmentedDataset()
+
+    # my_aug_dataset.add_image_label(original_image.numpy()[0], original_label.numpy()[0])
+
+    # custom_dataset = AugmentedDataset(transform=transform)
+    # custom_dataset.clear_dataset()
+    # for image, label in im_label:
+    # custom_dataset.add_image_label(image, label)
+    # pass
+
+    # dataloader = DataLoader(custom_dataset, batch_size=100, shuffle=True)
+
+    # print("dl aug: ", next(iter(dataloader))[0].shape, next(iter(dataloader))[1].shape)
 
     data = []
 
@@ -103,16 +147,112 @@ def augment_data():
     blurred_image = image_to_tensor(blurred_image)
     label = original_label + " (blurred)"
     data += [(blurred_image, label)]
-    
-    # Shadow
-    shadow_image = shadow(original_image.numpy()[0])
-    shadow_image = image_to_tensor(shadow_image)
-    label = original_label + " (shadow)"
-    data += [(shadow_image, label)]
-    
-    
+
     # Plot all
     plot_grid(data)
+    return
+
+    # Data augmentation
+    mnist_dataset = datasets.MNIST(
+        root="./data/mnist_data", train=True, transform=transform, download=True
+    )
+    dataloader = DataLoader(mnist_dataset, batch_size=100, shuffle=True)
+
+    custom_dataset = AugmentedDataset(transform=transform)
+    # custom_dataset.clear_dataset()
+
+    for images, labels in tqdm.tqdm(dataloader):
+        for image, label in zip(images, labels):
+            # print("input: ", image.shape, label.shape)
+            augmented = augment_image(image.numpy()[0])
+            # print("augmented: ", augmented.append)
+            label = torch.tensor(label.item(), dtype=torch.int64).reshape(1)
+            for im in augmented:
+                # image_np = im.numpy()
+                custom_dataset.add_image_label(im, label)
+
+    # length = len(custom_dataset)
+    # for _ in range(5):
+    #    index = int(np.random.uniform(0, length))
+    #    entry = custom_dataset[index]
+    #    plt.imshow(entry[0].reshape(28,28), cmap="gray")
+    #    plt.title(f"Label: {entry[1].item()}")
+    #    plt.show()
+
+
+def clear_augmented_data():
+    custom_dataset = AugmentedDataset()
+    custom_dataset.clear_dataset()
+
+
+def augment_data():
+    transform = transforms.Compose([transforms.ToTensor()])
+
+    mnist_dataset = datasets.MNIST(
+        root="./data/mnist_data", train=True, transform=transform, download=True
+    )
+    dataloader = DataLoader(mnist_dataset, batch_size=100, shuffle=True)
+
+    custom_dataset = AugmentedDataset(transform=transform)
+
+    for images, labels in tqdm.tqdm(dataloader):
+        for image, label in zip(images, labels):
+            augmented = augment_image(image.numpy()[0])
+            label = torch.tensor(label.item(), dtype=torch.int64).reshape(1)
+            for im in augmented:
+                custom_dataset.buffer_add_image_label(im, label)
+
+        break
+    custom_dataset.fast_save()
+
+
+def ds2tester():
+    transform = transforms.Compose([transforms.ToTensor()])
+
+    mnist_dataset = datasets.MNIST(
+        root="./data/mnist_data", train=True, transform=transform, download=True
+    )
+    dataloader = DataLoader(mnist_dataset, batch_size=100, shuffle=True)
+
+    image, label = next(iter(dataloader))
+    print("original image: ", image.shape, image.dtype)
+    print("original label: ", label.shape, label.dtype)
+
+    ds2 = DS2(transform=transform)
+    ds2.clear_dataset()
+
+    for images, labels in tqdm.tqdm(dataloader):
+        for image, label in zip(images, labels):
+            augmented = augment_image(image.numpy()[0])
+            label = torch.tensor(label.item(), dtype=torch.int64).reshape(1)
+            for im in augmented:
+                ds2.add_image_label(im, label)
+
+    ds2.save_to_files()
+
+    ds3 = DS2(transform=transform)
+
+    dl3 = DataLoader(ds3, batch_size=10, shuffle=True)
+
+    for images, labels in tqdm.tqdm(dl3):
+        for image, label in zip(images, labels):
+            plt.imshow(image.reshape(28, 28), cmap="gray")
+            plt.title(f"MAIN - Label: {label.item()}")
+            # print(image.dtype, image)
+            plt.show()
+        break
+
+
+def misc():
+    transform = transforms.Compose([transforms.ToTensor()])
+    ds = DS2(transform=transform)
+    dl = DataLoader(ds, batch_size=10, shuffle=True)
+    for images, labels in tqdm.tqdm(dl):
+        for image, label in zip(images, labels):
+            plt.imshow(image.reshape(28, 28), cmap="gray")
+            plt.title(f"MAIN - Label: {label.item()}")
+            plt.show()
+        break
 
 
 def main():
@@ -137,6 +277,18 @@ def main():
     )
 
     parser.add_argument(
+        "--clear_augmented_data",
+        action="store_true",
+        help="Clear augmented data",
+    )
+
+    parser.add_argument(
+        "--misc",
+        action="store_true",
+        help="Misceleanous stuff",
+    )
+
+    parser.add_argument(
         "--data_augmentation", action="store_true", help="Augment the data"
     )
 
@@ -147,14 +299,19 @@ def main():
 
     if args.show_random_img:
         path = "data/archive/train-images-idx3-ubyte"
-        grid_size = 4
-        show_random_img(path, grid_size)
+        show_random_img(path)
 
     if args.train_simple_nn:
         train_simple_nn()
 
     if args.data_augmentation:
         augment_data()
+
+    if args.clear_augmented_data:
+        clear_augmented_data()
+
+    if args.misc:
+        misc()
 
 
 if __name__ == "__main__":
