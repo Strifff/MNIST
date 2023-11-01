@@ -47,10 +47,13 @@ def plot_grid(data):
 
 class CustomProgressBar:
     def __init__(
-        self, total_items, text_color="cyan", bar_color="purple", desc="Processing"
+        self, total_items, text_color="cyan", bar_color="magenta", desc="Processing"
     ):
         self.progress = Progress()
-        self.task = self.progress.add_task(f"[{text_color}]{desc}", total=total_items)
+        self.task = self.progress.add_task(
+            f"[{text_color}]{desc}",
+            total=total_items,
+        )
         self.total_items = total_items
         self.completed_count = 0
         self.started = False

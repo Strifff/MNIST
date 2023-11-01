@@ -395,3 +395,143 @@ def augment_image(image):
         tensor_images += [image_to_tensor(blurred)]
 
     return tensor_images
+
+
+def ds2tester():
+    transform = transforms.Compose([transforms.ToTensor()])
+
+    mnist_dataset = datasets.MNIST(
+        root="./data/mnist_data", train=True, transform=transform, download=True
+    )
+    dataloader = DataLoader(mnist_dataset, batch_size=100, shuffle=True)
+
+    image, label = next(iter(dataloader))
+    print("original image: ", image.shape, image.dtype)
+    print("original label: ", label.shape, label.dtype)
+
+    ds2 = DS2(transform=transform)
+    ds2.clear_dataset()
+
+    for images, labels in dataloader:
+        for image, label in zip(images, labels):
+            augmented = augment_image(image.numpy()[0])
+            label = torch.tensor(label.item(), dtype=torch.int64).reshape(1)
+            for im in augmented:
+                ds2.add_image_label(im, label)
+
+    ds2.save_to_files()
+
+    ds3 = DS2(transform=transform)
+
+    dl3 = DataLoader(ds3, batch_size=10, shuffle=True)
+
+    for images, labels in dl3:
+        for image, label in zip(images, labels):
+            plt.imshow(image.reshape(28, 28), cmap="gray")
+            plt.title(f"MAIN - Label: {label.item()}")
+            # print(image.dtype, image)
+            plt.show()
+        break
+
+
+def augment_data_tester():
+    print("TESTER")
+    transform = transforms.Compose([transforms.ToTensor()])
+    mnist_dataset = datasets.MNIST(
+        root="./data/mnist_data", train=True, transform=transform, download=True
+    )
+    dataloader = DataLoader(mnist_dataset, batch_size=1, shuffle=True)
+    original_image, original_label = next(iter(dataloader))
+    # print("image: ", original_image.shape, original_image.dtype)
+    # print("label: ", original_label.shape, original_label.dtype)
+
+    dataloader = DataLoader(mnist_dataset, batch_size=10, shuffle=True)
+    # print("dl std: ", next(iter(dataloader))[0].shape, next(iter(dataloader))[1].shape)
+
+    print("original: ", original_image.shape, original_label.shape)
+    print("original: ", original_label.shape, original_label.dtype)
+    augmented = augment_image(original_image.numpy()[0])
+
+    im_label = []
+
+    for im in augmented:
+        im_label += [(im, original_label)]
+
+    plot_grid(im_label)
+    return
+    # my_aug_dataset = AugmentedDataset()
+
+    # my_aug_dataset.add_image_label(original_image.numpy()[0], original_label.numpy()[0])
+
+    # custom_dataset = AugmentedDataset(transform=transform)
+    # custom_dataset.clear_dataset()
+    # for image, label in im_label:
+    # custom_dataset.add_image_label(image, label)
+    # pass
+
+    # dataloader = DataLoader(custom_dataset, batch_size=100, shuffle=True)
+
+    # print("dl aug: ", next(iter(dataloader))[0].shape, next(iter(dataloader))[1].shape)
+
+    data = []
+
+    # Original image
+    original_label = str(original_label.numpy()[0])
+    label = original_label + " (original)"
+    data += [(original_image, label)]
+
+    # Padded image
+    padded_image = pad_image(original_image.numpy()[0], 14)
+    padded_image = scale_down_image(padded_image, 28, 28)
+    padded_image = image_to_tensor(padded_image)
+    label = original_label + " (padded)"
+    data += [(padded_image, label)]
+
+    # Skew image
+    skewed_image = skew(original_image.numpy()[0], 0.5)
+    skewed_image = image_to_tensor(skewed_image)
+    label = original_label + " (skewed)"
+    data += [(skewed_image, label)]
+
+    # Rotate image
+    rotated_image = rotate(original_image.numpy()[0])
+    rotated_image = image_to_tensor(rotated_image)
+    label = original_label + " (rotated)"
+    data += [(rotated_image, label)]
+
+    # Blur image
+    blurred_image = blur(original_image.numpy()[0])
+    blurred_image = image_to_tensor(blurred_image)
+    label = original_label + " (blurred)"
+    data += [(blurred_image, label)]
+
+    # Plot all
+    plot_grid(data)
+    return
+
+    # Data augmentation
+    mnist_dataset = datasets.MNIST(
+        root="./data/mnist_data", train=True, transform=transform, download=True
+    )
+    dataloader = DataLoader(mnist_dataset, batch_size=100, shuffle=True)
+
+    custom_dataset = AugmentedDataset(transform=transform)
+    # custom_dataset.clear_dataset()
+
+    for images, labels in dataloader:
+        for image, label in zip(images, labels):
+            # print("input: ", image.shape, label.shape)
+            augmented = augment_image(image.numpy()[0])
+            # print("augmented: ", augmented.append)
+            label = torch.tensor(label.item(), dtype=torch.int64).reshape(1)
+            for im in augmented:
+                # image_np = im.numpy()
+                custom_dataset.add_image_label(im, label)
+
+    # length = len(custom_dataset)
+    # for _ in range(5):
+    #    index = int(np.random.uniform(0, length))
+    #    entry = custom_dataset[index]
+    #    plt.imshow(entry[0].reshape(28,28), cmap="gray")
+    #    plt.title(f"Label: {entry[1].item()}")
+    #    plt.show()
