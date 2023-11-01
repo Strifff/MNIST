@@ -40,32 +40,81 @@ class SimpleCNN(nn.Module):
         x = self.relu(x)
         x = self.fc2(x)
         return x
-    
-    
+
+
 import torch.nn as nn
 
+
 class DynamicCNN(nn.Module):
-    def __init__(self, num_hidden_layers, in_channels, num_classes, hidden_channels, fc_out_features, conv_kernel_sizes, conv_strides, pool_kernel_sizes, pool_strides):
+    def __init__(
+        self,
+        num_hidden_layers,
+        in_channels,
+        num_classes,
+        hidden_channels,
+        fc_out_features,
+        conv_kernel_sizes,
+        conv_strides,
+        pool_kernel_sizes,
+        pool_strides,
+    ):
         super(DynamicCNN, self).__init()
         self.conv_kernel_sizes = conv_kernel_sizes
         self.conv_strides = conv_strides
         self.pool_kernel_sizes = pool_kernel_sizes
         self.pool_strides = pool_strides
-        self.layers = self._build_layers(num_hidden_layers, in_channels, hidden_channels, fc_out_features, num_classes)
+        self.layers = self._build_layers(
+            num_hidden_layers,
+            in_channels,
+            hidden_channels,
+            fc_out_features,
+            num_classes,
+        )
 
-    def _build_layers(self, num_hidden_layers, in_channels, hidden_channels, fc_out_features, num_classes):
+    def _build_layers(
+        self,
+        num_hidden_layers,
+        in_channels,
+        hidden_channels,
+        fc_out_features,
+        num_classes,
+    ):
         layers = []
 
         # Add the input layer
-        layers.append(nn.Conv2d(in_channels, hidden_channels, kernel_size=self.conv_kernel_sizes[0], stride=self.conv_strides[0], padding=1))
+        layers.append(
+            nn.Conv2d(
+                in_channels,
+                hidden_channels,
+                kernel_size=self.conv_kernel_sizes[0],
+                stride=self.conv_strides[0],
+                padding=1,
+            )
+        )
         layers.append(nn.ReLU())
-        layers.append(nn.MaxPool2d(kernel_size=self.pool_kernel_sizes[0], stride=self.pool_strides[0]))
+        layers.append(
+            nn.MaxPool2d(
+                kernel_size=self.pool_kernel_sizes[0], stride=self.pool_strides[0]
+            )
+        )
 
         # Add hidden layers
         for i in range(1, num_hidden_layers + 1):
-            layers.append(nn.Conv2d(hidden_channels, hidden_channels, kernel_size=self.conv_kernel_sizes[i], stride=self.conv_strides[i], padding=1))
+            layers.append(
+                nn.Conv2d(
+                    hidden_channels,
+                    hidden_channels,
+                    kernel_size=self.conv_kernel_sizes[i],
+                    stride=self.conv_strides[i],
+                    padding=1,
+                )
+            )
             layers.append(nn.ReLU())
-            layers.append(nn.MaxPool2d(kernel_size=self.pool_kernel_sizes[i], stride=self.pool_strides[i]))
+            layers.append(
+                nn.MaxPool2d(
+                    kernel_size=self.pool_kernel_sizes[i], stride=self.pool_strides[i]
+                )
+            )
 
         # Flatten and add fully connected layers
         layers.append(nn.Flatten())
@@ -78,16 +127,16 @@ class DynamicCNN(nn.Module):
     def forward(self, x):
         return self.layers(x)
 
-# Example usage:
-#in_channels = 1  # For grayscale images
-#num_classes = 10  # MNIST has 10 classes
-#hidden_channels = 32
-#fc_out_features = 128
-#conv_kernel_sizes = [3, 3, 3]  # List of kernel sizes for each convolutional layer
-#conv_strides = [1, 1, 1]  # List of strides for each convolutional layer
-#pool_kernel_sizes = [2, 2, 2]  # List of kernel sizes for each pooling layer
-#pool_strides = [2, 2, 2]  # List of strides for each pooling layer
 
+# Example usage:
+# in_channels = 1  # For grayscale images
+# num_classes = 10  # MNIST has 10 classes
+# hidden_channels = 32
+# fc_out_features = 128
+# conv_kernel_sizes = [3, 3, 3]  # List of kernel sizes for each convolutional layer
+# conv_strides = [1, 1, 1]  # List of strides for each convolutional layer
+# pool_kernel_sizes = [2, 2, 2]  # List of kernel sizes for each pooling layer
+# pool_strides = [2, 2, 2]  # List of strides for each pooling layer
 
 
 # Evaluate the model on a batch of data

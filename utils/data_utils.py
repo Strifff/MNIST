@@ -10,6 +10,7 @@ import os
 from torchvision import transforms
 import torch
 from torch.utils.data import Dataset
+from tqdm import tqdm
 
 
 class AugmentedDataset(Dataset):
@@ -23,8 +24,6 @@ class AugmentedDataset(Dataset):
         self.label_file = label_file
         self.images = self.load_images()
         self.labels = self.load_labels()
-        self.images_buffer = []
-        self.labels_buffer = []
         self.transform = transform
 
     def __len__(self):
@@ -33,25 +32,6 @@ class AugmentedDataset(Dataset):
     def __getitem__(self, idx):
         image = self.images[idx]
         label = self.labels[idx]
-        if isinstance(image, torch.Tensor):
-            if self.transform:
-                image = self.transform(image)
-                # image = image
-                print("tensor")
-        else:
-            # Handle non-tensor types (e.g., NumPy arrays) with previous approach
-            try:
-                if not image.flags.writeable:
-                    image = np.copy(image)
-                    print("not tensor")
-            except AttributeError:
-                print("Error copying image, returning original")
-            if self.transform:
-                print("transform----------------------------------------")
-                print(image)
-                image = self.transform(image)
-                print("after transform")
-                print(image)
         return image, label
 
     def load_images(self):
@@ -59,11 +39,6 @@ class AugmentedDataset(Dataset):
         try:
             with open(self.image_file, "rb") as file:
                 magic, num_images, rows, cols = struct.unpack(">IIII", file.read(16))
-                print("magic: ", magic)
-                print("num_images: ", num_images)
-                print("rows: ", rows)
-                print("cols: ", cols)
-
                 image_data = file.read()
 
                 for i in range(num_images):
@@ -71,10 +46,10 @@ class AugmentedDataset(Dataset):
                         image_data[i * rows * cols : (i + 1) * rows * cols],
                         dtype=np.uint8,
                     )
+
                     image = np.reshape(image, (rows, cols))
+                    image = torch.from_numpy(np.copy(image)).float().unsqueeze(0) / 255
                     images.append(image)
-                    print("image")
-                    print(image)
         except (FileNotFoundError, ValueError, struct.error):
             print("Error loading images")
 
@@ -82,7 +57,6 @@ class AugmentedDataset(Dataset):
 
     def load_labels(self):
         labels = []
-
         try:
             with open(self.label_file, "rb") as file:
                 magic, num_labels = struct.unpack(">II", file.read(8))
@@ -101,44 +75,26 @@ class AugmentedDataset(Dataset):
 
         self.images.append(image)
         self.labels.append(label)
-        self.save_to_files
-
-    def buffer_add_image_label(self, image, label):
-        image = image.detach().cpu()
-        label = label.detach().cpu()
-        image = torch.squeeze(image, dim=0)
-        label = torch.squeeze(label, dim=0)
-        self.images_buffer.append(image)
-        self.labels_buffer.append(label)
-
-    def fast_save(self):
-        self.save_to_files()
-        print("Dataset saved")
-        self.images_buffer = []  # Clear the temporary storage
-        self.labels_buffer = []
 
     def save_to_files(self):
         with open(self.image_file, "wb") as f_image:
-            f_image.write(struct.pack(">IIII", 2051, len(self.images_buffer), 28, 28))
-            for img in self.images_buffer:
-                img_array = img.detach().cpu().numpy()  # .reshape(28, 28)
+            f_image.write(struct.pack(">IIII", 2051, len(self.images), 28, 28))
+            for img in self.images:
+                img = img.detach().cpu()
+                img_array = (img * 254.9).squeeze(0).numpy().astype(np.uint8)
                 f_image.write(img_array.tobytes())
-                print("save")
-                print(img_array)
 
         with open(self.label_file, "wb") as f_label:
-            f_label.write(struct.pack(">II", 2049, len(self.labels_buffer)))
-            for lbl in self.labels_buffer:
+            f_label.write(struct.pack(">II", 2049, len(self.labels)))
+            for lbl in self.labels:
                 f_label.write(struct.pack("B", lbl))
 
     def clear_dataset(self):
-        # Delete the files if they exist
         if os.path.exists(self.image_file):
             os.remove(self.image_file)
         if os.path.exists(self.label_file):
             os.remove(self.label_file)
 
-        # Save empty data to the files after deletion
         self.images = []  # Clear the images
         self.labels = []  # Clear the labels
         self.save_to_files()

@@ -5,7 +5,6 @@ import torch.nn as nn
 import numpy as np
 import torch.optim as optim
 import matplotlib.pyplot as plt
-import tqdm
 import time
 
 from torchvision import datasets, transforms
@@ -23,7 +22,7 @@ from utils.data_utils import (
     AugmentedDataset,
     DS2,
 )
-from utils.plot_utils import plot_grid
+from utils.plot_utils import plot_grid, CustomProgressBar
 
 
 def install_test():
@@ -161,7 +160,7 @@ def augment_data_tester():
     custom_dataset = AugmentedDataset(transform=transform)
     # custom_dataset.clear_dataset()
 
-    for images, labels in tqdm.tqdm(dataloader):
+    for images, labels in dataloader:
         for image, label in zip(images, labels):
             # print("input: ", image.shape, label.shape)
             augmented = augment_image(image.numpy()[0])
@@ -191,19 +190,21 @@ def augment_data():
     mnist_dataset = datasets.MNIST(
         root="./data/mnist_data", train=True, transform=transform, download=True
     )
-    dataloader = DataLoader(mnist_dataset, batch_size=100, shuffle=True)
+    dataloader = DataLoader(mnist_dataset, batch_size=600, shuffle=True)
 
-    custom_dataset = AugmentedDataset(transform=transform)
+    augmented_dataset = AugmentedDataset(transform=transform)
+    augmented_dataset.clear_dataset()
 
-    for images, labels in tqdm.tqdm(dataloader):
+    progress = CustomProgressBar(total_items=len(dataloader), desc="Augmenting data")
+
+    for images, labels in dataloader:
+        progress.update_progress()
         for image, label in zip(images, labels):
             augmented = augment_image(image.numpy()[0])
             label = torch.tensor(label.item(), dtype=torch.int64).reshape(1)
             for im in augmented:
-                custom_dataset.buffer_add_image_label(im, label)
-
-        break
-    custom_dataset.fast_save()
+                augmented_dataset.add_image_label(im, label)
+    augmented_dataset.save_to_files()
 
 
 def ds2tester():
@@ -221,7 +222,7 @@ def ds2tester():
     ds2 = DS2(transform=transform)
     ds2.clear_dataset()
 
-    for images, labels in tqdm.tqdm(dataloader):
+    for images, labels in dataloader:
         for image, label in zip(images, labels):
             augmented = augment_image(image.numpy()[0])
             label = torch.tensor(label.item(), dtype=torch.int64).reshape(1)
@@ -234,7 +235,7 @@ def ds2tester():
 
     dl3 = DataLoader(ds3, batch_size=10, shuffle=True)
 
-    for images, labels in tqdm.tqdm(dl3):
+    for images, labels in dl3:
         for image, label in zip(images, labels):
             plt.imshow(image.reshape(28, 28), cmap="gray")
             plt.title(f"MAIN - Label: {label.item()}")
@@ -245,12 +246,12 @@ def ds2tester():
 
 def misc():
     transform = transforms.Compose([transforms.ToTensor()])
-    ds = DS2(transform=transform)
-    dl = DataLoader(ds, batch_size=10, shuffle=True)
-    for images, labels in tqdm.tqdm(dl):
+    augmented_dataset = AugmentedDataset(transform=transform)
+    aug_dl = DataLoader(augmented_dataset, batch_size=10, shuffle=True)
+    for images, labels in aug_dl:
         for image, label in zip(images, labels):
             plt.imshow(image.reshape(28, 28), cmap="gray")
-            plt.title(f"MAIN - Label: {label.item()}")
+            plt.title(f"Label: {label.item()}")
             plt.show()
         break
 
