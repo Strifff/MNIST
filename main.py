@@ -9,23 +9,22 @@ import time
 
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
+from torchsummary import summary
 from test_installation import test_pytorch, show_random_img
-from neural_network.network import SimpleNN, SimpleCNN, evaluate_batch
-from utils.data_utils import (
-    skew,
-    rotate,
-    pad_image,
-    image_to_tensor,
-    blur,
-    scale_down_image,
-    augment_image,
-    AugmentedDataset,
-    DS2,
+from neural_network.network import (
+    SimpleNN,
+    SimpleCNN,
+    DynamicCNN,
+    evaluate_batch,
+    save_hyperparametes,
+    load_hyperparameters,
 )
+
+from utils.data_utils import augment_image, AugmentedDataset
 from utils.plot_utils import plot_grid, CustomProgressBar
 
 
-def install_test():
+def test_installation():
     test_pytorch()
 
 
@@ -38,6 +37,11 @@ def train_simple_NN():
     batch_size = 64
     num_epochs = 1000
 
+    # Initialize the model, loss function, and optimizer
+    model = SimpleNN(input_size, hidden_size, num_classes)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+
     # Load the MNIST dataset
     transform = transforms.Compose([transforms.ToTensor()])
     mnist_dataset = datasets.MNIST(
@@ -49,29 +53,18 @@ def train_simple_NN():
         root="./mnist_data", train=False, transform=transform, download=True
     )
 
-    # Initialize the model, loss function, and optimizer
-    model = SimpleNN(input_size, hidden_size, num_classes)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=learning_rate)
-
     # Training loop
     for epoch in range(num_epochs):
         for images, labels in dataloader:
             # Forward pass
-            print("images simple NN: ", images.shape, images.dtype)
             outputs = model(images)
-            print("outputs simple NN: ", outputs.shape, outputs.dtype)
             loss = criterion(outputs, labels)
-            print("loss simple NN: ", loss.shape, loss.dtype)
-            print(loss)
-            exit()
 
             # Backpropagation and optimization
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item()}")
         eval_data = DataLoader(eval_dataset, batch_size=batch_size, shuffle=True)
         data_iterator = iter(eval_data)
         batch = next(data_iterator)
@@ -84,33 +77,35 @@ def train_simple_NN():
 def train_simple_CNN():
     # Hyperparameters
     input_size = 28 * 28  # MNIST images are 28x28 pixels
-    hidden_size = 128  # Number of neurons in the hidden layer
     num_classes = 10  # MNIST has 10 classes (0-9)
     learning_rate = 0.001
     batch_size = 64
-    num_epochs = 1000
+    num_epochs = 100
+    num_batches = 1000
+
+    # Initialize the model, loss function, and optimizer
+    model = SimpleCNN(input_channels=1, num_classes=num_classes)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.SGD(model.parameters(), lr=learning_rate)
 
     # Initialize dataloader
     transform = transforms.Compose([transforms.ToTensor()])
-    mnist_dataset = datasets.MNIST(
-        root="./mnist_data", train=True, transform=transform, download=True
-    )
-    dataloader = DataLoader(mnist_dataset, batch_size=64, shuffle=True)
+
+    augmented_dataset = AugmentedDataset(transform=transform)
+    dataloader = DataLoader(augmented_dataset, batch_size=64, shuffle=True)
 
     eval_dataset = datasets.MNIST(
         root="./mnist_data", train=False, transform=transform, download=True
     )
+    eval_data = DataLoader(eval_dataset, batch_size=batch_size, shuffle=True)
 
-    # Initialize the model, loss function, and optimizer
-    model = SimpleCNN()
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=learning_rate)
-    
+    process = CustomProgressBar(total_items=num_epochs, desc="Training")
     # Training loop
     for epoch in range(num_epochs):
+        i = 0
         for images, labels in dataloader:
             # Forward pass
-            outputs = model(images, input_size, hidden_size, num_classes)
+            outputs = model(images)
             loss = criterion(outputs, labels)
 
             # Backpropagation and optimization
@@ -118,11 +113,70 @@ def train_simple_CNN():
             loss.backward()
             optimizer.step()
 
-        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item()}")
-        eval_data = DataLoader(eval_dataset, batch_size=batch_size, shuffle=True)
-        data_iterator = iter(eval_data)
-        batch = next(data_iterator)
-        evaluate_batch(model, batch)
+            # Too large augmented dataset
+            i += 1
+            if i == num_batches:
+                break
+        process.update_progress()
+        evaluate_batch(model, eval_data, epoch)
+
+
+def train_dynamic_CNN():
+    hyper_path = "neural_network/hyperparameters.json"
+    if os.path.exists(hyper_path):
+        hyperparameters = load_hyperparameters(hyper_path)
+    else:
+        # Init hyperparameters
+        hyperparameters = {
+            "batch_size": 64,
+            "learning_rate": 0.001,
+            "input_channels": 1,
+            "input_hidden_channels": 32,
+            "input_kernel_size": 3,
+            "input_stride": 1,
+            "input_pool_kernel_size": 2,
+            "input_pool_stride": 2,
+            "num_hidden_layers": 2,
+            "hidden_channels": [32, 64],
+            "kernel_sizes": [3, 3],
+            "strides": [1, 1],
+            "pool_kernel_sizes": [2, 2],
+            "pool_strides": [2, 2],
+            "fc_out_features": 128,
+            "num_classes": 10,
+        }
+        save_hyperparametes(hyperparameters, hyper_path)
+
+    # Initialize the model, loss function, and optimizer
+    model = DynamicCNN(
+        input_channels=hyperparameters["input_channels"],
+        input_hidden_channels=hyperparameters["input_hidden_channels"],
+        input_kernel_size=hyperparameters["input_kernel_size"],
+        input_stride=hyperparameters["input_stride"],
+        input_pool_kernel_size=hyperparameters["input_pool_kernel_size"],
+        input_pool_stride=hyperparameters["input_pool_stride"],
+        num_hidden_layers=hyperparameters["num_hidden_layers"],
+        hidden_channels=hyperparameters["hidden_channels"],
+        kernel_sizes=hyperparameters["kernel_sizes"],
+        strides=hyperparameters["strides"],
+        pool_kernel_sizes=hyperparameters["pool_kernel_sizes"],
+        pool_strides=hyperparameters["pool_strides"],
+        fc_out_features=hyperparameters["fc_out_features"],
+        num_classes=hyperparameters["num_classes"],
+    )
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+
+    # Initialize dataloader
+    transform = transforms.Compose([transforms.ToTensor()])
+    aug_data = AugmentedDataset(transform=transform)
+    dataloader = DataLoader(aug_data, batch_size=batch_size, shuffle=True)
+
+    eval_dataset = datasets.MNIST(
+        root="./mnist_data", train=False, transform=transform, download=True
+    )
+    eval_data = DataLoader(eval_dataset, batch_size=batch_size, shuffle=True)
 
 
 def clear_augmented_data():
@@ -154,83 +208,30 @@ def augment_data():
 
 
 def misc():
-    transform = transforms.Compose([transforms.ToTensor()])
-    augmented_dataset = AugmentedDataset(transform=transform)
-    aug_dl = DataLoader(augmented_dataset, batch_size=10, shuffle=True)
-    for images, labels in aug_dl:
-        for image, label in zip(images, labels):
-            plt.imshow(image.reshape(28, 28), cmap="gray")
-            plt.title(f"Label: {label.item()}")
-            plt.show()
-        break
+    d_cnn = DynamicCNN()
 
 
 def main():
     parser = argparse.ArgumentParser(description="MNIST refresher")
 
-    parser.add_argument(
-        "--test_installation",
-        action="store_true",
-        help="Train the custom Transformer model",
-    )
+    actions = {
+        "test_installation": test_installation,
+        "train_simple_nn": train_simple_NN,
+        "train_simple_cnn": train_simple_CNN,
+        "train_dynamic_cnn": train_dynamic_CNN,
+        "data_augmentation": augment_data,
+        "clear_augmented_data": clear_augmented_data,
+        "misc": misc,
+    }
 
-    parser.add_argument(
-        "--show_random_img",
-        action="store_true",
-        help="Show a random image from the MNIST dataset",
-    )
-
-    parser.add_argument(
-        "--train_simple_nn",
-        action="store_true",
-        help="Train the network",
-    )
-
-    parser.add_argument(
-        "--train_simple_cnn",
-        action="store_true",
-        help="Train the network",
-    )
-
-    parser.add_argument(
-        "--clear_augmented_data",
-        action="store_true",
-        help="Clear augmented data",
-    )
-
-    parser.add_argument(
-        "--misc",
-        action="store_true",
-        help="Misceleanous stuff",
-    )
-
-    parser.add_argument(
-        "--data_augmentation", action="store_true", help="Augment the data"
-    )
+    for action, function in actions.items():
+        parser.add_argument(f"--{action}", action="store_true", help=function.__doc__)
 
     args = parser.parse_args()
 
-    if args.test_installation:
-        install_test()
-
-    if args.show_random_img:
-        path = "data/archive/train-images-idx3-ubyte"
-        show_random_img(path)
-
-    if args.train_simple_nn:
-        train_simple_NN()
-
-    if args.train_simple_cnn:
-        train_simple_CNN()
-
-    if args.data_augmentation:
-        augment_data()
-
-    if args.clear_augmented_data:
-        clear_augmented_data()
-
-    if args.misc:
-        misc()
+    for action, function in actions.items():
+        if getattr(args, action):
+            function()
 
 
 if __name__ == "__main__":

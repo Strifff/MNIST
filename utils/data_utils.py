@@ -26,6 +26,8 @@ class AugmentedDataset(Dataset):
         self.labels = self.load_labels()
         self.transform = transform
 
+        print("Dataset loaded")
+
     def __len__(self):
         return len(self.images)
 

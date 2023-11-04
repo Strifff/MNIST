@@ -54,7 +54,7 @@ class CustomProgressBar:
             f"[{text_color}]{desc}",
             total=total_items,
         )
-        self.total_items = total_items
+        self.total_items = total_items+1
         self.completed_count = 0
         self.started = False
 

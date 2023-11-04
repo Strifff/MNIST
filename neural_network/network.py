@@ -1,6 +1,9 @@
+import os
+import json
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import numpy as np
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 
@@ -22,41 +25,48 @@ class SimpleNN(nn.Module):
 
 
 class SimpleCNN(nn.Module):
-    def __init__(self, input_size, hidden_size, num_classes):
+    def __init__(self, input_channels, num_classes):
         super(SimpleCNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, 1)
-        self.relu = nn.ReLU()
-        self.conv2 = nn.Conv2d(32, 64, 3, 1)
-        self.flatten = nn.Flatten()
-        self.fc1 = nn.Linear(9216, 128)
-        self.fc2 = nn.Linear(128, 10)
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(input_channels, 16, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+
+        # Calculate input size for the fully connected layer after convolution
+        self.fc_input_size = 32 * 7 * 7  # Assuming input image size of 28x28
+
+        self.fc_layers = nn.Sequential(
+            nn.Linear(self.fc_input_size, 128), nn.ReLU(), nn.Linear(128, num_classes)
+        )
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.relu(x)
-        x = self.conv2(x)
-        x = self.flatten(x)
-        x = self.fc1(x)
-        x = self.relu(x)
-        x = self.fc2(x)
-        return x
-
-
-import torch.nn as nn
+        x = self.conv_layers(x)
+        x = x.view(x.size(0), -1)  # Flatten the tensor
+        x = self.fc_layers(x)
+        return x  # torch.softmax(x, dim=1)
 
 
 class DynamicCNN(nn.Module):
     def __init__(
         self,
+        input_channels,
+        input_hidden_channels,
+        input_kernel_size,
+        input_stride,
+        input_pool_kernel_size,
+        input_pool_stride,
         num_hidden_layers,
-        in_channels,
-        num_classes,
         hidden_channels,
-        fc_out_features,
-        conv_kernel_sizes,
-        conv_strides,
+        kernel_sizes,
+        strides,
         pool_kernel_sizes,
         pool_strides,
+        fc_out_features,
+        num_classes,
     ):
         super(DynamicCNN, self).__init()
         self.conv_kernel_sizes = conv_kernel_sizes
@@ -139,19 +149,28 @@ class DynamicCNN(nn.Module):
 # pool_strides = [2, 2, 2]  # List of strides for each pooling layer
 
 
-# Evaluate the model on a batch of data
-def evaluate_batch(model, batch):
+def save_hyperparametes(hyperparameters, path):
+    with open(path, "w") as f:
+        json.dump(hyperparameters, f)
+
+
+def load_hyperparameters(path):
+    with open(path, "r") as f:
+        hyperparameters = json.load(f)
+    return hyperparameters
+
+
+def evaluate_batch(model, eval_data, epoch):
     correct = 0
     total = 0
-    images = batch[0]
-    labels = batch[1]
     with torch.no_grad():
-        outputs = model(images)
-        _, predicted = torch.max(outputs.data, 1)
-        total += labels.size(0)
-        correct += (predicted == labels).sum().item()
+        for images, labels in eval_data:
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
 
     accuracy = (correct / total) * 100
-    print(f"Accuracy:  {accuracy}%")
-    print(f"Predicted: {predicted[:10]}")
-    print(f"Actual:    {labels[:10]}")
+    print(
+        f"Epoch {epoch}:\tAccuracy = {'{:.2f}'.format(np.round(accuracy,2))}%\t{correct}/{total}"
+    )
